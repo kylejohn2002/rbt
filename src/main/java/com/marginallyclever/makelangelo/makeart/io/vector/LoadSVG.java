@@ -97,7 +97,7 @@ public class LoadSVG implements TurtleLoader {
 
 			Matrix3d m = getMatrixFromElement(element);
 
-			SVGPointList pointList = element.getAnimatedPoints();
+			SVGPointList pointList = element.getPoints();
 			int numPoints = pointList.getNumberOfItems();
 			//logger.debug("New Node has "+pathObjects+" elements.");
 
@@ -339,16 +339,100 @@ public class LoadSVG implements TurtleLoader {
 			for(int i=0; i<itemCount; i++) {
 				SVGPathSeg item = pathList.getItem(i);
 				switch( item.getPathSegType() ) {
+					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(m); 			// Z z
 					case SVGPathSeg.PATHSEG_MOVETO_ABS 			-> doMoveToAbs(item,m);  	// M
 					case SVGPathSeg.PATHSEG_MOVETO_REL 			-> doMoveRel(item,m);  		// m
-					case SVGPathSeg.PATHSEG_LINETO_ABS 			-> doLineToAbs(item,m);  	// L H V
-					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l h v
-					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C c
-					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(m); 			// Z z
+					case SVGPathSeg.PATHSEG_LINETO_ABS 			-> doLineToAbs(item,m);  	// L
+					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l
+					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C
+					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL 	-> doCubicCurveRel(item,m);	// c
+					//case SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_ABS -> ;
+					//case SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_REL -> ;
+					//case SVGPathSeg.PATHSEG_ARC_ABS -> ;
+					//case SVGPathSeg.PATHSEG_ARC_REL -> ;
+					case SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS -> doLineHAbs(item,m);	// H
+					case SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_REL -> doLineHRel(item,m);	// h
+					case SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS -> doLineVAbs(item,m);		// V
+					case SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL -> doLineVRel(item,m);		// v
+					//case SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_ABS -> ;
+					//case SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_REL -> ;
+					//case SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_ABS -> ;
+					//case SVGPathSeg.PATHSEG_CURVETO_QUADRATIC_SMOOTH_REL -> ;
 					default -> throw new Exception("Found unknown SVGPathSeg type "+((SVGItem)item).getValueAsString());
 				}
 			}
 		}
+	}
+
+	private void doLineHAbs(SVGPathSeg item, Matrix3d m) {
+		SVGPathSegLinetoHorizontalAbs path = (SVGPathSegLinetoHorizontalAbs)item;
+
+		Vector3d p1 = transform(path.getX(),0,m);
+		logger.debug("Line H Abs {}", p1);
+		pathPoint.set(p1.getX(),myTurtle.getY(),0);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		isNewPath=false;
+	}
+
+	private void doLineVAbs(SVGPathSeg item, Matrix3d m) {
+		SVGPathSegLinetoVerticalAbs path = (SVGPathSegLinetoVerticalAbs)item;
+
+		Vector3d p1 = transform(0,path.getY(),m);
+		logger.debug("Line V Abs {}", p1);
+		pathPoint.set(myTurtle.getX(),p1.getY(),0);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		isNewPath=false;
+	}
+
+	private void doLineHRel(SVGPathSeg item, Matrix3d m) {
+		SVGPathSegLinetoHorizontalRel path = (SVGPathSegLinetoHorizontalRel)item;
+
+		Vector3d p1 = transform(path.getX(),0,m);
+		logger.debug("Line H Rel {}", p1);
+		pathPoint.set(myTurtle.getX(),myTurtle.getY(),0);
+		pathPoint.add(p1);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		isNewPath=false;
+	}
+
+	private void doLineVRel(SVGPathSeg item, Matrix3d m) {
+		SVGPathSegLinetoVerticalRel path = (SVGPathSegLinetoVerticalRel)item;
+
+		Vector3d p1 = transform(0,path.getY(),m);
+		logger.debug("Line V Rel {}", p1);
+		pathPoint.set(myTurtle.getX(),myTurtle.getY(),0);
+		pathPoint.add(p1);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		isNewPath=false;
+	}
+
+	private void doCubicCurveRel(SVGPathSeg item, Matrix3d m) {
+		SVGPathSegCurvetoCubicAbs path = (SVGPathSegCurvetoCubicAbs)item;
+
+		// x0,y0 is the first point
+		Vector3d p0 = pathPoint;
+		// x1,y1 is the first control point
+		Vector3d p1 = transform(path.getX1(),path.getY1(),m);
+		// x2,y2 is the second control point
+		Vector3d p2 = transform(path.getX2(),path.getY2(),m);
+		// x3,y3 is the end point
+		Vector3d p3 = transform(path.getX(),path.getY(),m);
+
+		p1.add(p0);
+		p2.add(p0);
+		p3.add(p0);
+
+		logger.debug("Cubic curve rel {} {} {} {}", p0,p1,p2,p3);
+
+		Bezier b = new Bezier(
+				p0.x,p0.y,
+				p1.x,p1.y,
+				p2.x,p2.y,
+				p3.x,p3.y);
+		List<Point2D> points = b.generateCurvePoints(0.1);
+		for(Point2D p : points) myTurtle.moveTo(p.x,p.y);
+		pathPoint.set(p3);
+		isNewPath=true;
 	}
 
 	private void doCubicCurveAbs(SVGPathSeg item, Matrix3d m) {
@@ -363,7 +447,7 @@ public class LoadSVG implements TurtleLoader {
 		// x3,y3 is the end point
 		Vector3d p3 = transform(path.getX(),path.getY(),m);
 
-		logger.debug("Cubic curve {} {} {} {}", p0,p1,p2,p3);
+		logger.debug("Cubic curve abs {} {} {} {}", p0,p1,p2,p3);
 
 		Bezier b = new Bezier(
 				p0.x,p0.y,
@@ -465,7 +549,7 @@ public class LoadSVG implements TurtleLoader {
 		UserAgent userAgent = new UserAgentAdapter();
 		DocumentLoader loader = new DocumentLoader(userAgent);
 		BridgeContext bridgeContext = new BridgeContext(userAgent, loader);
-		bridgeContext.setDynamicState(BridgeContext.STATIC);
+		bridgeContext.setDynamicState(BridgeContext.DYNAMIC);
 
 		// Enable CSS- and SVG-specific enhancements.
 		(new GVTBuilder()).build(bridgeContext, document);
