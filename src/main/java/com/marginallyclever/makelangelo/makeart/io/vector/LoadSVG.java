@@ -337,7 +337,7 @@ public class LoadSVG implements TurtleLoader {
 				SVGPathSeg item = pathList.getItem(i);
 				switch( item.getPathSegType() ) {
 					case SVGPathSeg.PATHSEG_MOVETO_ABS 			-> doMoveToAbs(item,m);  	// M
-					case SVGPathSeg.PATHSEG_MOVETO_REL 			-> doMoveRel(item,m);  		// m
+					case SVGPathSeg.PATHSEG_MOVETO_REL 			-> doMoveToRel(item,m);  		// m
 					case SVGPathSeg.PATHSEG_LINETO_ABS 			-> doLineToAbs(item,m);  	// L H V
 					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l h v
 					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C c
@@ -392,7 +392,7 @@ public class LoadSVG implements TurtleLoader {
 		isNewPath=false;
 	}
 
-	private void doMoveRel(SVGPathSeg item, Matrix3d m) {
+	private void doMoveToRel(SVGPathSeg item, Matrix3d m) {
 		SVGPathSegMovetoRel path = (SVGPathSegMovetoRel)item;
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		logger.debug("Move Rel {}", p);
