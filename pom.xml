@@ -20,7 +20,7 @@ It pairs really well with Marlin-polargraph, the code in the brain of the robot 
 	<licenses>
 		<license>
 			<name>GPLv2</name>
-			<url>http://opensource.org/licenses/GPL-2.0</url>
+			<url>https://opensource.org/licenses/GPL-2.0</url>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
@@ -354,7 +354,7 @@ It pairs really well with Marlin-polargraph, the code in the brain of the robot 
 		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
-			<version>2.8.0</version>
+			<version>2.11.0</version>
 		</dependency>
 		<!-- https://github.com/java-native/jssc/ -->
 		<dependency>
@@ -378,7 +378,7 @@ It pairs really well with Marlin-polargraph, the code in the brain of the robot 
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpcore</artifactId>
-			<version>4.4.14</version>
+			<version>4.4.15</version>
 		</dependency>
 		<!-- https://mvnrepository.com/artifact/org.apache.httpcomponents/httpmime -->
 		<dependency>
@@ -402,19 +402,19 @@ It pairs really well with Marlin-polargraph, the code in the brain of the robot 
 		<dependency>
 			<groupId>ch.qos.logback</groupId>
 			<artifactId>logback-classic</artifactId>
-			<version>1.2.10</version>
+			<version>1.2.11</version>
 		</dependency>
 		<!-- logging -->
 		<dependency>
 			<groupId>org.codehaus.janino</groupId>
 			<artifactId>janino</artifactId>
-			<version>3.1.6</version>
+			<version>3.1.7</version>
 		</dependency>
 		<!-- logging -->
 		<dependency>
 			<groupId>org.slf4j</groupId>
 			<artifactId>slf4j-api</artifactId>
-			<version>1.7.32</version>
+			<version>1.7.36</version>
 		</dependency>
 
 		<dependency>
@@ -432,12 +432,12 @@ It pairs really well with Marlin-polargraph, the code in the brain of the robot 
 		<dependency>
 			<groupId>org.json</groupId>
 			<artifactId>json</artifactId>
-			<version>20201115</version>
+			<version>20220320</version>
 		</dependency>
 		<dependency>
 			<groupId>org.jetbrains</groupId>
 			<artifactId>annotations</artifactId>
-			<version>20.1.0</version>
+			<version>23.0.0</version>
 		</dependency>
 		<!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
 		<dependency>
@@ -449,32 +449,32 @@ It pairs really well with Marlin-polargraph, the code in the brain of the robot 
 		<dependency>
 			<groupId>io.sf.carte</groupId>
 			<artifactId>echosvg-all</artifactId>
-			<version>0.1.2</version>
+			<version>0.2</version>
 		</dependency>
 
 		<dependency>
 			<groupId>org.assertj</groupId>
 			<artifactId>assertj-swing-junit</artifactId>
-			<version>3.9.2</version>
+			<version>3.17.1</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.mockito</groupId>
 			<artifactId>mockito-inline</artifactId>
-			<version>4.2.0</version>
+			<version>4.6.1</version>
 			<scope>test</scope>
 		</dependency>
 		<!-- qoi image format support -->
 		<dependency>
 			<groupId>me.saharnooby</groupId>
 			<artifactId>qoi-java</artifactId>
-			<version>1.2.0</version>
+			<version>1.2.1</version>
 		</dependency>
 		<!-- Also add this, if you want to use QOI with ImageIO -->
 		<dependency>
 			<groupId>me.saharnooby</groupId>
 			<artifactId>qoi-java-awt</artifactId>
-			<version>1.2.0</version>
+			<version>1.2.1</version>
 		</dependency>
 
 		<dependency>
