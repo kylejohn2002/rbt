@@ -24,19 +24,19 @@ import java.util.List;
 
 /**
  * @author Dan Royer
- * See https://www.w3.org/TR/SVG/paths.html
+ * See <a href="https://www.w3.org/TR/SVG/paths.html">w3.org</a>
  */
 public class LoadSVG implements TurtleLoader {
 	private static final Logger logger = LoggerFactory.getLogger(LoadSVG.class);
 
 	private static final String LABEL_STROKE="stroke:";
 
-	private static FileNameExtensionFilter filter = new FileNameExtensionFilter("Scaleable Vector Graphics 1.1", "svg");
+	private static final FileNameExtensionFilter filter = new FileNameExtensionFilter("Scaleable Vector Graphics 1.1", "svg");
 	private Turtle myTurtle;
 
 	private boolean isNewPath;  // for cubic paths
-	private Vector3d pathFirstPoint = new Vector3d();
-	private Vector3d pathPoint = new Vector3d();
+	private final Vector3d pathFirstPoint = new Vector3d();
+	private final Vector3d pathPoint = new Vector3d();
 
 	@Override
 	public FileNameExtensionFilter getFileNameFilter() {
@@ -87,7 +87,7 @@ public class LoadSVG implements TurtleLoader {
 	 * Parse through all the SVG polyline elements and raster them to gcode.
 	 * @param pathNodes the source of the elements
 	 */
-	private void parsePolylineElements(NodeList pathNodes) throws Exception {
+	private void parsePolylineElements(NodeList pathNodes) {
 	    int pathNodeCount = pathNodes.getLength();
 		logger.debug("{} elements", pathNodeCount);
 	    for( int iPathNode = 0; iPathNode < pathNodeCount; iPathNode++ ) {
@@ -101,19 +101,19 @@ public class LoadSVG implements TurtleLoader {
 			int numPoints = pointList.getNumberOfItems();
 			//logger.debug("New Node has "+pathObjects+" elements.");
 
-			SVGPoint item = (SVGPoint)pointList.getItem(0);
+			SVGPoint item = pointList.getItem(0);
 			Vector3d v2 = transform(item.getX(),item.getY(),m);
 			myTurtle.jumpTo(v2.x,v2.y);
 
 			for( int i=1; i<numPoints; ++i ) {
-				item = (SVGPoint)pointList.getItem(i);
+				item = pointList.getItem(i);
 				v2 = transform(item.getX(),item.getY(),m);
 				myTurtle.moveTo(v2.x,v2.y);
 			}
 		}
 	}
 
-	private void parseLineElements(NodeList node) throws Exception {
+	private void parseLineElements(NodeList node) {
 		Vector3d v2;
 	    int pathNodeCount = node.getLength();
 		logger.debug("{} elements", pathNodeCount);
@@ -144,9 +144,8 @@ public class LoadSVG implements TurtleLoader {
 			if(style.contains(LABEL_STROKE)) {
 				int k = style.indexOf(LABEL_STROKE);
 				String strokeStyleName = style.substring(k+LABEL_STROKE.length());
-				if(strokeStyleName.contentEquals("none") || strokeStyleName.contentEquals("white") )
-					// it is!  bail.
-					return true;
+				// it is!  bail.
+				return strokeStyleName.contentEquals("none") || strokeStyleName.contentEquals("white");
 			} else {
 				// default SVG stroke is "none", which isn't even transparent - it's nothing!
 				return false;
@@ -165,10 +164,9 @@ public class LoadSVG implements TurtleLoader {
 	 * y3    g  h
 	 * draw a-b-d-f-h-g-e-c-a.
 	 *
-	 * See https://developer.mozilla.org/en-US/docs/Web/SVG/Element/rect
-	 * @param node
+	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/SVG/Element/rect">SVG specification</a>
 	 */
-	private void parseRectElements(NodeList node) throws Exception {
+	private void parseRectElements(NodeList node) {
 	    int pathNodeCount = node.getLength();
 		logger.debug("{} elements", pathNodeCount);
 	    for( int iPathNode = 0; iPathNode < pathNodeCount; iPathNode++ ) {
@@ -219,7 +217,6 @@ public class LoadSVG implements TurtleLoader {
 
 	/**
 	 *
-	 * @param turtle
 	 * @param cx center position
 	 * @param cy center position
 	 * @param rx radius on X
@@ -231,7 +228,7 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d v2;
 		double steps=1;
 		if(rx>0 && ry>0) {
-			double r = rx>ry?rx:ry;
+			double r = Math.max(rx, ry);
 			double circ = Math.PI*r*2.0;  // radius to circumference
 			steps = Math.ceil(circ/4.0);  // 1/4 circumference
 			steps = Math.max(steps,1);
@@ -246,7 +243,7 @@ public class LoadSVG implements TurtleLoader {
 		}
 	}
 
-	private void parseCircleElements(NodeList node) throws Exception {
+	private void parseCircleElements(NodeList node) {
 		Vector3d v2;
 
 	    int pathNodeCount = node.getLength();
@@ -344,7 +341,7 @@ public class LoadSVG implements TurtleLoader {
 					case SVGPathSeg.PATHSEG_LINETO_ABS 			-> doLineToAbs(item,m);  	// L H V
 					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l h v
 					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C c
-					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(m); 			// Z z
+					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(); 			// Z z
 					default -> throw new Exception("Found unknown SVGPathSeg type "+((SVGItem)item).getValueAsString());
 				}
 			}
@@ -400,7 +397,7 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		logger.debug("Move Rel {}", p);
 		pathPoint.add(p);
-		if(isNewPath==true) pathFirstPoint.set(pathPoint);
+		if(isNewPath) pathFirstPoint.set(pathPoint);
 		myTurtle.jumpTo(p.x,p.y);
 		isNewPath=false;
 	}
@@ -410,12 +407,12 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		logger.debug("Move Abs {}", p);
 		pathPoint.set(p);
-		if(isNewPath==true) pathFirstPoint.set(pathPoint);
+		if(isNewPath) pathFirstPoint.set(pathPoint);
 		myTurtle.jumpTo(p.x,p.y);
 		isNewPath=false;
 	}
 
-	private void doClosePath(Matrix3d m) {
+	private void doClosePath() {
 		logger.debug("Close path");
 		myTurtle.moveTo(pathFirstPoint.x,pathFirstPoint.y);
 		isNewPath=true;
@@ -456,10 +453,8 @@ public class LoadSVG implements TurtleLoader {
 	/**
 	 * Enhance the SVG DOM for the given document to provide CSS- and
 	 * SVG-specific DOM interfaces.
-	 *
-	 * @param document
-	 *            The document to enhance.
-	 * @link https://cwiki.apache.org/confluence/display/XMLGRAPHICSBATIK/BootSvgAndCssDom
+	 * @param document The document to enhance.
+	 * @link <a href="https://cwiki.apache.org/confluence/display/XMLGRAPHICSBATIK/BootSvgAndCssDom">apache.org</a>
 	 */
 	private void initSVGDOM(Document document) {
 		UserAgent userAgent = new UserAgentAdapter();

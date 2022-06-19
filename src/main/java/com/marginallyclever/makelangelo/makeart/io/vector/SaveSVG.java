@@ -1,6 +1,5 @@
 package com.marginallyclever.makelangelo.makeart.io.vector;
 
-import com.marginallyclever.convenience.ColorRGB;
 import com.marginallyclever.convenience.StringHelper;
 import com.marginallyclever.makelangelo.turtle.Turtle;
 import com.marginallyclever.makelangelo.turtle.TurtleMove;
@@ -14,11 +13,11 @@ import java.io.OutputStreamWriter;
 
 /**
  * @author Dan Royer
- * See https://www.w3.org/TR/SVG/paths.html
+ * See <a href="https://www.w3.org/TR/SVG/paths.html">https://www.w3.org/TR/SVG/paths.html</a>
  */
 public class SaveSVG implements TurtleSaver {
 	private static final Logger logger = LoggerFactory.getLogger(SaveSVG.class);
-	private static FileNameExtensionFilter filter = new FileNameExtensionFilter("Scaleable Vector Graphics 1.1", "svg");
+	private static final FileNameExtensionFilter filter = new FileNameExtensionFilter("Scalable Vector Graphics 1.1", "svg");
 	
 	@Override
 	public FileNameExtensionFilter getFileNameFilter() {
@@ -26,7 +25,7 @@ public class SaveSVG implements TurtleSaver {
 	}
 
 	/**
-	 * see http://paulbourke.net/dataformats/dxf/min3d.html for details
+	 * see <a href="http://paulbourke.net/dataformats/dxf/min3d.html">http://paulbourke.net/dataformats/dxf/min3d.html</a> for details
 	 */
 	@Override
 	public boolean save(OutputStream outputStream, Turtle turtle) throws Exception {
@@ -41,17 +40,12 @@ public class SaveSVG implements TurtleSaver {
 		out.write("<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\""+dim.getX()+" "+dim.getY()+" "+dim.getWidth()+" "+dim.getHeight()+"\">\n");
 
 		boolean isUp=true;
-		double x0 = turtle.history.get(0).x;
-		double y0 = turtle.history.get(0).y;
-		ColorRGB color = new ColorRGB(0,0,0);
 		boolean hasStarted=false;
 
 		for( TurtleMove m : turtle.history ) {
 			switch(m.type) {
 			case TRAVEL:
 				if(!isUp) isUp=true;
-				x0=m.x;
-				y0=m.y;
 				break;
 			case DRAW_LINE:
 				if(isUp) {
@@ -61,11 +55,8 @@ public class SaveSVG implements TurtleSaver {
 					out.write(" L");
 				}
 
-					out.write(" "+StringHelper.formatDouble(m.x));
-					out.write(" "+StringHelper.formatDouble(-m.y));
-				x0=m.x;
-				y0=m.y;
-				
+				out.write(" "+StringHelper.formatDouble(m.x));
+				out.write(" "+StringHelper.formatDouble(-m.y));
 				break;
 			case TOOL_CHANGE:
 				if(hasStarted) {
