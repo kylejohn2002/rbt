@@ -1,20 +1,20 @@
 module com.marginallyclever.makelangelo {
     requires com.marginallyclever.nodegraphcore;
+    requires com.formdev.flatlaf;
     requires org.slf4j;
-    requires jssc;
-    requires java.desktop;
-    requires jogamp.fat;
-    requires logback.core;
     requires org.json;
     requires org.apache.commons.io;
-    requires java.prefs;
-    requires kabeja;
-    requires io.sf.carte.echosvg;
-    requires vecmath;
-    requires jrpicam;
     requires org.jetbrains.annotations;
-    requires com.formdev.flatlaf;
     requires org.reflections;
+    requires io.sf.carte.echosvg;
+    requires java.desktop;
+    requires jogamp.fat;
+    requires java.prefs;
+    requires jssc;
+    requires jrpicam;
+    requires kabeja;
+    requires logback.core;
+    requires vecmath;
 
     opens com.marginallyclever.convenience;
     opens com.marginallyclever.makelangelo.makeart.io.vector;

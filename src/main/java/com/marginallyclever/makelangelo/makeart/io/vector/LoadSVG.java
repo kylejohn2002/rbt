@@ -351,44 +351,54 @@ public class LoadSVG implements TurtleLoader {
 	private void doMoveToAbs(SVGPathSeg item, Matrix3d m) {
 		SVGPathSegMovetoAbs path = (SVGPathSegMovetoAbs)item;
 		logger.debug("Move Abs ({},{})", path.getX(),path.getY());
+
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.set(p);
-		if(isNewPath) pathFirstPoint.set(pathPoint);
 		myTurtle.jumpTo(p.x,p.y);
-		isNewPath=false;
+
+		rememberIfFirstMove(p);
 	}
 
 	private void doMoveToRel(SVGPathSeg item, Matrix3d m) {
 		SVGPathSegMovetoRel path = (SVGPathSegMovetoRel)item;
 		logger.debug("Move Rel ({},{})", path.getX(),path.getY());
+
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.add(p);
-		if(isNewPath) pathFirstPoint.set(pathPoint);
 		myTurtle.jumpTo(p.x,p.y);
+
+		rememberIfFirstMove(p);
+	}
+
+	private void rememberIfFirstMove(Vector3d p) {
+		if(isNewPath) pathFirstPoint.set(p);
 		isNewPath=false;
 	}
 
 	private void doLineToRel(SVGPathSeg item, Matrix3d m) {
 		SVGPathSegLinetoRel path = (SVGPathSegLinetoRel)item;
 		logger.debug("Line Rel ({},{})", path.getX(),path.getY());
+
 		Vector3d p = transform(path.getX(),path.getY(),m);
-		pathPoint.set(myTurtle.getX(),myTurtle.getY(),0);
 		pathPoint.add(p);
-		myTurtle.moveTo(pathPoint.x,pathPoint.y);
-		isNewPath=false;
+		myTurtle.moveTo(p.x,p.y);
 	}
 
 	private void doLineToAbs(SVGPathSeg item, Matrix3d m) {
 		SVGPathSegLinetoAbs path = (SVGPathSegLinetoAbs)item;
 		logger.debug("Line Abs ({},{})", path.getX(),path.getY());
+
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.set(p);
-		myTurtle.moveTo(pathPoint.x,pathPoint.y);
-		isNewPath=false;
+		myTurtle.moveTo(p.x,p.y);
 	}
 
 	private void doCubicCurveAbs(SVGPathSeg item, Matrix3d m) {
 		SVGPathSegCurvetoCubicAbs path = (SVGPathSegCurvetoCubicAbs)item;
+		logger.debug("Cubic curve ({},{})-({},{})-({},{})",
+				path.getX1(),path.getY1(),
+				path.getX2(),path.getY2(),
+				path.getX(),path.getY());
 
 		// x0,y0 is the first point
 		Vector3d p0 = pathPoint;
@@ -399,11 +409,6 @@ public class LoadSVG implements TurtleLoader {
 		// x3,y3 is the end point
 		Vector3d p3 = transform(path.getX(),path.getY(),m);
 
-		logger.debug("Cubic curve ({},{})-({},{})-({},{})",
-				path.getX1(),path.getY1(),
-				path.getX2(),path.getY2(),
-				path.getX(),path.getY());
-
 		Bezier b = new Bezier(
 				p0.x,p0.y,
 				p1.x,p1.y,
@@ -412,7 +417,6 @@ public class LoadSVG implements TurtleLoader {
 		List<Point2D> points = b.generateCurvePoints(0.1);
 		for(Point2D p : points) myTurtle.moveTo(p.x,p.y);
 		pathPoint.set(p3);
-		isNewPath=true;
 	}
 
 	private void doClosePath() {
