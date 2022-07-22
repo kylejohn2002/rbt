@@ -322,7 +322,7 @@ public class LoadSVG implements TurtleLoader {
 				parsePolylineElements(paths);
 				continue;
 			}
-			SVGOMPathElement element = ((SVGOMPathElement)paths.item( iPath ));
+			var element = ((SVGOMPathElement)paths.item( iPath ));
 			if(isElementStrokeNone(element))
 				continue;
 
@@ -345,7 +345,7 @@ public class LoadSVG implements TurtleLoader {
 					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL 	-> doCubicCurveRel(item,m);	// c
 					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(); 			// Z z
 					case SVGPathSeg.PATHSEG_ARC_ABS				-> doArcAbs(item,m);  // A
-					//case SVGPathSeg.PATHSEG_ARC_REL				-> doArcRel(item,m);  // a
+					case SVGPathSeg.PATHSEG_ARC_REL				-> doArcRel(item,m);  // a
 					case SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS -> doLineToVerticalAbs(item,m);  // V
 					case SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL -> doLineToVerticalRel(item,m);  // v
 					case SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS -> doLineToHorizontalAbs(item,m);  // H
@@ -357,41 +357,47 @@ public class LoadSVG implements TurtleLoader {
 		}
 	}
 
-	private double [] polarToCartesian(double cx,double cy,double radius,double degrees) {
-		var radians = Math.toRadians(degrees);
-		var x = cx + radius * Math.cos(radians);
-		var y = cy + radius * Math.sin(radians);
-		return new double[]{x,y};
-	}
-
 	/**
-	 * Calculate the angle between vector a vector b
-	 *
-	 * @param u
-	 * @param v
+	 * Calculate the angle between vector u vector v
+	 * @param u vector 1
+	 * @param v vector 2
 	 * @return the angle in radian
 	 */
 	public static double getAngle(Vector3d u, Vector3d v) {
 		double cos = u.dot(v) / (u.length() * v.length());
-		double result = Math.acos(cos);
+		double result = Math.abs(Math.acos(cos));
 		double sign = Math.signum(u.x*v.y - u.y*v.x);
-		return sign * Math.abs(result);
+		return (sign<0) ? -result : result;
 	}
 
 	private void doArcAbs(SVGPathSeg item, Matrix3d m) {
 		var path = (SVGPathSegArcAbs) item;
-		boolean sweep = path.getSweepFlag();
-		boolean large = path.getLargeArcFlag();
+		boolean fS = path.getSweepFlag();
+		boolean fA = path.getLargeArcFlag();
 		var r1 = path.getR1();
 		var r2 = path.getR2();
 		var angleDegrees = path.getAngle();
 		var end = transform(path.getX(), path.getY(), m);
 
 		// with start (aka pathPoint), end, rx, ry find the two centers.
-		getArcCenter(pathPoint, end, r1, r2, angleDegrees, large, sweep);
+		getArcCenter(pathPoint, end, r1, r2, angleDegrees, fA, fS);
 	}
 
-	private void getArcCenter(Vector3d start, Vector3d end, double rx, double ry, double angleDegrees, boolean fA, boolean fS) {
+	private void doArcRel(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegArcAbs) item;
+		boolean fS = path.getSweepFlag();
+		boolean fA = path.getLargeArcFlag();
+		var r1 = path.getR1();
+		var r2 = path.getR2();
+		var angleDegrees = path.getAngle();
+		var end = transform(path.getX(), path.getY(), m);
+		end.add(pathPoint);
+
+		// with start (aka pathPoint), end, rx, ry find the two centers.
+		getArcCenter(pathPoint, end, r1, r2, angleDegrees, fA, fS);
+	}
+
+	private void getArcCenter(Vector3d start, Vector3d end, double r1, double r2, double angleDegrees, boolean fA, boolean fS) {
 		// translate to mid point of start-end
 		var prime = new Vector3d(
 				(start.x-end.x)/2.0,
@@ -399,7 +405,8 @@ public class LoadSVG implements TurtleLoader {
 				0);
 		// rotate
 		Matrix3d m = new Matrix3d();
-		m.rotZ(Math.toRadians(-angleDegrees));
+		double angleRadians = Math.toRadians(angleDegrees);
+		m.rotZ(-angleRadians);
 		m.transform(prime);
 		var x1p = prime.x;
 		var y1p = prime.y;
@@ -408,79 +415,76 @@ public class LoadSVG implements TurtleLoader {
 		// Based on http://www.w3.org/TR/SVG/implnote.html#ArcOutOfRangeParameters
 		// Step (a): Ensure radii are non-zero
 		// Step (b): Ensure radii are positive
-		rx = Math.abs(rx);
-		ry = Math.abs(ry);
+		r1 = Math.abs(r1);
+		r2 = Math.abs(r2);
 		// Step (c): Ensure radii are large enough
-		var lambda = ( (x1p * x1p) / (rx * rx) ) + ( (y1p * y1p) / (ry * ry) );
+		var lambda = ( (x1p * x1p) / (r1 * r1) ) + ( (y1p * y1p) / (r2 * r2) );
 		if(lambda > 1) {
-			rx = Math.sqrt(lambda) * rx;
-			ry = Math.sqrt(lambda) * ry;
+			r1 = Math.sqrt(lambda) * r1;
+			r2 = Math.sqrt(lambda) * r2;
 		}
-
 
 		// Step 2: Compute (cx′, cy′)
 		var sign = (fA == fS)? -1 : 1;
 
-		// Bit of a hack, as presumably rounding errors were making his negative inside the square root!
-		double v = ((rx * rx * ry * ry) - (rx * rx * y1p * y1p) - (ry * ry * x1p * x1p)) / ((rx * rx * y1p * y1p) + (ry * ry * x1p * x1p));
-		double co = (v < 1e-7) ? 0 : sign * Math.sqrt(v);
-		Vector3d Cprime = new Vector3d(rx*y1p/ry,-ry*x1p/rx,0);
-		Cprime.scale(v * co);
+		double v = ((r1 * r1 * r2 * r2) - (r1 * r1 * y1p * y1p) - (r2 * r2 * x1p * x1p)) / ((r1 * r1 * y1p * y1p) + (r2 * r2 * x1p * x1p));
+		Vector3d CPrime = new Vector3d(r1*y1p/r2,-r2*x1p/r1,0);
+		CPrime.scale(sign * Math.sqrt(v));
 
 		// Step 3: Compute (cx, cy) from (cx′, cy′)
-		prime.set(Cprime);
-		m.invert();
-		m.transform(prime);
-
-		var middle2 = new Vector3d(
+		Vector3d center = new Vector3d(CPrime);
+		m.transpose();
+		m.transform(center);
+		center.add(new Vector3d(
 				(start.x+end.x)/2.0,
 				(start.y+end.y)/2.0,
-				0);
-		middle2.add(prime);
+				0));
 
 		// Step 4: compute start angle and sweep angle
 		Vector3d s1 = new Vector3d(
-				(x1p-Cprime.x)/rx,
-				(y1p-Cprime.y)/ry,
+				( x1p - CPrime.x)/r1,
+				( y1p - CPrime.y)/r2,
 				0);
 		double startAngleRadians = getAngle(new Vector3d(1,0,0),s1);
+		logger.debug("startAngleRadians={}",startAngleRadians);
 
 		Vector3d s2 = new Vector3d(
-				(-x1p-Cprime.x)/rx,
-				(-y1p-Cprime.y)/ry,
+				(-x1p - CPrime.x)/r1,
+				(-y1p - CPrime.y)/r2,
 				0);
-		double sweepRadians = getAngle(s1,s2) % (Math.PI*2.0);
+		double sweep = getAngle(s1,s2);
+		logger.debug("sweep={}",sweep);
+
+		final double TWO_PI=Math.PI*2.0;
+
+		double sweepRadians = sweep % TWO_PI;
 		if(!fS) {
-			if(sweepRadians > 0) sweepRadians -= (Math.PI*2.0);
+			if(sweepRadians > 0) sweepRadians -= TWO_PI;
 		} else {
-			if(sweepRadians < 0) sweepRadians += (Math.PI*2.0);
+			if(sweepRadians < 0) sweepRadians += TWO_PI;
 		}
 
+		int steps = (int)Math.abs(sweepRadians)*5;
+		logger.debug("steps={}",steps);
 
-		int steps = (int)Math.abs(sweepRadians)*10;
-		double angleRadians = Math.toRadians(angleDegrees);
+		logger.debug("angleDegrees={}",angleDegrees);
 		Vector3d rx2 = new Vector3d( Math.cos(angleRadians), Math.sin(angleRadians),0 );
 		Vector3d ry2 = new Vector3d( -rx2.y, rx2.x, 0 );
-		rx2.scale(rx);
-		ry2.scale(ry);
 
 		Vector3d rx3 = new Vector3d();
 		Vector3d ry3 = new Vector3d();
 		Vector3d c2 = new Vector3d();
-
-		logger.debug("angleDegrees={}",angleDegrees);
-		logger.debug("steps={}",steps);
+		double scale = fS? 1:-1;
 
 		for(int theta = 0; theta < steps; ++theta ) {
-			double vv = sweepRadians * ((double)theta / (double)steps);
-			double r = startAngleRadians + (fS ? vv : -vv);
+			double r = startAngleRadians + scale * sweepRadians * ((double)theta / (double)steps);
 			rx3.set(rx2);
-			rx3.scale(Math.cos(r));
+			rx3.scale(r1 * Math.cos(r));
 
 			ry3.set(ry2);
-			ry3.scale(Math.sin(r));
+			ry3.scale(r2 * Math.sin(r));
 
-			c2.set(middle2);
+			c2.set(center);
 			c2.add(rx3);
 			c2.add(ry3);
 
