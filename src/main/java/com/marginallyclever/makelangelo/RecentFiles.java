@@ -6,21 +6,24 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.io.Serial;
 import java.util.ArrayList;
 import java.util.prefs.Preferences;
 
 public final class RecentFiles extends JMenu {
 	private static final Logger logger = LoggerFactory.getLogger(RecentFiles.class);
 	
+	@Serial
 	private static final long serialVersionUID = -4331360984016876093L;
 
 	public final int MAX_FILES = 10;
 
 	@SuppressWarnings("deprecation")
-	private Preferences prefs = PreferencesHelper
+	private final Preferences prefs = PreferencesHelper
 			.getPreferenceNode(PreferencesHelper.MakelangeloPreferenceKey.LEGACY_MAKELANGELO_ROOT);
 
-	private ArrayList<String> fileList = new ArrayList<String>();
+	private final ArrayList<String> fileList = new ArrayList<>();
 	private ActionListener submenuListener;
 
 	// Load recent files from prefs
@@ -90,6 +93,9 @@ public final class RecentFiles extends JMenu {
 			JMenuItem item = new JMenuItem(f);
 			this.add(item);
 			item.addActionListener(submenuListener);
+			if(i==1) {
+				item.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F5,0));
+			}
 		}
 		
 	}
