@@ -328,46 +328,213 @@ public class LoadSVG implements TurtleLoader {
 
 			Matrix3d m = getMatrixFromElement(element);
 
-			SVGPathSegList pathList = element.getNormalizedPathSegList();
+			SVGPathSegList pathList = element.getPathSegList();
 			int itemCount = pathList.getNumberOfItems();
 			logger.debug("Node has {} elements.", itemCount);
 			isNewPath=true;
 
 			for(int i=0; i<itemCount; i++) {
 				SVGPathSeg item = pathList.getItem(i);
+				logger.debug(((SVGItem)item).getValueAsString());
 				switch( item.getPathSegType() ) {
 					case SVGPathSeg.PATHSEG_MOVETO_ABS 			-> doMoveToAbs(item,m);  	// M
 					case SVGPathSeg.PATHSEG_MOVETO_REL 			-> doMoveToRel(item,m);     // m
-					case SVGPathSeg.PATHSEG_LINETO_ABS 			-> doLineToAbs(item,m);  	// L H V
-					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l h v
-					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C c
+					case SVGPathSeg.PATHSEG_LINETO_ABS 			-> doLineToAbs(item,m);  	// L
+					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l
+					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C
+					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL 	-> doCubicCurveRel(item,m);	// c
 					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(); 			// Z z
-					default -> throw new Exception("Found unknown SVGPathSeg type "+((SVGItem)item).getValueAsString());
+					case SVGPathSeg.PATHSEG_ARC_ABS				-> doArcAbs(item,m);  // A
+					//case SVGPathSeg.PATHSEG_ARC_REL				-> doArcRel(item,m);  // a
+					case SVGPathSeg.PATHSEG_LINETO_VERTICAL_ABS -> doLineToVerticalAbs(item,m);  // V
+					case SVGPathSeg.PATHSEG_LINETO_VERTICAL_REL -> doLineToVerticalRel(item,m);  // v
+					case SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_ABS -> doLineToHorizontalAbs(item,m);  // H
+					case SVGPathSeg.PATHSEG_LINETO_HORIZONTAL_REL -> doLineToHorizontalRel(item,m);  // h
+
+					default -> throw new Exception("Found unknown SVGPathSeg type "+item.getPathSegType());
 				}
 			}
 		}
 	}
 
-	private void doMoveToAbs(SVGPathSeg item, Matrix3d m) {
-		SVGPathSegMovetoAbs path = (SVGPathSegMovetoAbs)item;
-		logger.debug("Move Abs ({},{})", path.getX(),path.getY());
+	private double [] polarToCartesian(double cx,double cy,double radius,double degrees) {
+		var radians = Math.toRadians(degrees);
+		var x = cx + radius * Math.cos(radians);
+		var y = cy + radius * Math.sin(radians);
+		return new double[]{x,y};
+	}
 
+	/**
+	 * Calculate the angle between vector a vector b
+	 *
+	 * @param u
+	 * @param v
+	 * @return the angle in radian
+	 */
+	public static double getAngle(Vector3d u, Vector3d v) {
+		double cos = u.dot(v) / (u.length() * v.length());
+		double result = Math.acos(cos);
+		double sign = Math.signum(u.x*v.y - u.y*v.x);
+		return sign * Math.abs(result);
+	}
+
+	private void doArcAbs(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegArcAbs) item;
+		boolean sweep = path.getSweepFlag();
+		boolean large = path.getLargeArcFlag();
+		var r1 = path.getR1();
+		var r2 = path.getR2();
+		var angleDegrees = path.getAngle();
+		var end = transform(path.getX(), path.getY(), m);
+
+		// with start (aka pathPoint), end, rx, ry find the two centers.
+		getArcCenter(pathPoint, end, r1, r2, angleDegrees, large, sweep);
+	}
+
+	private void getArcCenter(Vector3d start, Vector3d end, double rx, double ry, double angleDegrees, boolean fA, boolean fS) {
+		// translate to mid point of start-end
+		var prime = new Vector3d(
+				(start.x-end.x)/2.0,
+				(start.y-end.y)/2.0,
+				0);
+		// rotate
+		Matrix3d m = new Matrix3d();
+		m.rotZ(Math.toRadians(-angleDegrees));
+		m.transform(prime);
+		var x1p = prime.x;
+		var y1p = prime.y;
+
+		// Ensure radii are large enough
+		// Based on http://www.w3.org/TR/SVG/implnote.html#ArcOutOfRangeParameters
+		// Step (a): Ensure radii are non-zero
+		// Step (b): Ensure radii are positive
+		rx = Math.abs(rx);
+		ry = Math.abs(ry);
+		// Step (c): Ensure radii are large enough
+		var lambda = ( (x1p * x1p) / (rx * rx) ) + ( (y1p * y1p) / (ry * ry) );
+		if(lambda > 1) {
+			rx = Math.sqrt(lambda) * rx;
+			ry = Math.sqrt(lambda) * ry;
+		}
+
+
+		// Step 2: Compute (cx′, cy′)
+		var sign = (fA == fS)? -1 : 1;
+
+		// Bit of a hack, as presumably rounding errors were making his negative inside the square root!
+		double v = ((rx * rx * ry * ry) - (rx * rx * y1p * y1p) - (ry * ry * x1p * x1p)) / ((rx * rx * y1p * y1p) + (ry * ry * x1p * x1p));
+		double co = (v < 1e-7) ? 0 : sign * Math.sqrt(v);
+		Vector3d Cprime = new Vector3d(rx*y1p/ry,-ry*x1p/rx,0);
+		Cprime.scale(v * co);
+
+		// Step 3: Compute (cx, cy) from (cx′, cy′)
+		prime.set(Cprime);
+		m.invert();
+		m.transform(prime);
+
+		var middle2 = new Vector3d(
+				(start.x+end.x)/2.0,
+				(start.y+end.y)/2.0,
+				0);
+		middle2.add(prime);
+
+		// Step 4: compute start angle and sweep angle
+		Vector3d s1 = new Vector3d(
+				(x1p-Cprime.x)/rx,
+				(y1p-Cprime.y)/ry,
+				0);
+		double startAngleRadians = getAngle(new Vector3d(1,0,0),s1);
+
+		Vector3d s2 = new Vector3d(
+				(-x1p-Cprime.x)/rx,
+				(-y1p-Cprime.y)/ry,
+				0);
+		double sweepRadians = getAngle(s1,s2) % (Math.PI*2.0);
+		if(!fS) {
+			if(sweepRadians > 0) sweepRadians -= (Math.PI*2.0);
+		} else {
+			if(sweepRadians < 0) sweepRadians += (Math.PI*2.0);
+		}
+
+
+		int steps = (int)Math.abs(sweepRadians)*10;
+		double angleRadians = Math.toRadians(angleDegrees);
+		Vector3d rx2 = new Vector3d( Math.cos(angleRadians), Math.sin(angleRadians),0 );
+		Vector3d ry2 = new Vector3d( -rx2.y, rx2.x, 0 );
+		rx2.scale(rx);
+		ry2.scale(ry);
+
+		Vector3d rx3 = new Vector3d();
+		Vector3d ry3 = new Vector3d();
+		Vector3d c2 = new Vector3d();
+
+		logger.debug("angleDegrees={}",angleDegrees);
+		logger.debug("steps={}",steps);
+
+		for(int theta = 0; theta < steps; ++theta ) {
+			double vv = sweepRadians * ((double)theta / (double)steps);
+			double r = startAngleRadians + (fS ? vv : -vv);
+			rx3.set(rx2);
+			rx3.scale(Math.cos(r));
+
+			ry3.set(ry2);
+			ry3.scale(Math.sin(r));
+
+			c2.set(middle2);
+			c2.add(rx3);
+			c2.add(ry3);
+
+			myTurtle.moveTo(c2.x,c2.y);
+		}
+
+		pathPoint.set(end);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+	}
+
+	private void doLineToVerticalAbs(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegLinetoVerticalAbs)item;
+		Vector3d p = transform(0,path.getY(),m);
+		pathPoint.y = p.y;
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+	}
+
+	private void doLineToVerticalRel(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegLinetoVerticalAbs)item;
+		Vector3d p = transform(0,path.getY(),m);
+		pathPoint.y += p.y;
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+	}
+
+	private void doLineToHorizontalAbs(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegLinetoHorizontalAbs)item;
+		Vector3d p = transform(path.getX(),0,m);
+		pathPoint.x = p.x;
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+	}
+
+	private void doLineToHorizontalRel(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegLinetoHorizontalAbs)item;
+		Vector3d p = transform(path.getX(),0,m);
+		pathPoint.x += p.x;
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+	}
+
+	private void doMoveToAbs(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegMovetoAbs)item;
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.set(p);
-		myTurtle.jumpTo(p.x,p.y);
+		myTurtle.jumpTo(pathPoint.x,pathPoint.y);
 
-		rememberIfFirstMove(p);
+		rememberIfFirstMove(pathPoint);
 	}
 
 	private void doMoveToRel(SVGPathSeg item, Matrix3d m) {
-		SVGPathSegMovetoRel path = (SVGPathSegMovetoRel)item;
-		logger.debug("Move Rel ({},{})", path.getX(),path.getY());
-
+		var path = (SVGPathSegMovetoRel)item;
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.add(p);
-		myTurtle.jumpTo(p.x,p.y);
+		myTurtle.jumpTo(pathPoint.x,pathPoint.y);
 
-		rememberIfFirstMove(p);
+		rememberIfFirstMove(pathPoint);
 	}
 
 	private void rememberIfFirstMove(Vector3d p) {
@@ -376,30 +543,21 @@ public class LoadSVG implements TurtleLoader {
 	}
 
 	private void doLineToRel(SVGPathSeg item, Matrix3d m) {
-		SVGPathSegLinetoRel path = (SVGPathSegLinetoRel)item;
-		logger.debug("Line Rel ({},{})", path.getX(),path.getY());
-
+		var path = (SVGPathSegLinetoRel)item;
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.add(p);
-		myTurtle.moveTo(p.x,p.y);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
 	}
 
 	private void doLineToAbs(SVGPathSeg item, Matrix3d m) {
-		SVGPathSegLinetoAbs path = (SVGPathSegLinetoAbs)item;
-		logger.debug("Line Abs ({},{})", path.getX(),path.getY());
-
+		var path = (SVGPathSegLinetoAbs)item;
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.set(p);
-		myTurtle.moveTo(p.x,p.y);
+		myTurtle.moveTo(pathPoint.x,pathPoint.y);
 	}
 
 	private void doCubicCurveAbs(SVGPathSeg item, Matrix3d m) {
-		SVGPathSegCurvetoCubicAbs path = (SVGPathSegCurvetoCubicAbs)item;
-		logger.debug("Cubic curve ({},{})-({},{})-({},{})",
-				path.getX1(),path.getY1(),
-				path.getX2(),path.getY2(),
-				path.getX(),path.getY());
-
+		var path = (SVGPathSegCurvetoCubicAbs)item;
 		// x0,y0 is the first point
 		Vector3d p0 = pathPoint;
 		// x1,y1 is the first control point
@@ -419,8 +577,32 @@ public class LoadSVG implements TurtleLoader {
 		pathPoint.set(p3);
 	}
 
+	private void doCubicCurveRel(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegCurvetoCubicRel)item;
+		// x0,y0 is the first point
+		Vector3d p0 = pathPoint;
+		// x1,y1 is the first control point
+		Vector3d p1 = transform(path.getX1(),path.getY1(),m);
+		// x2,y2 is the second control point
+		Vector3d p2 = transform(path.getX2(),path.getY2(),m);
+		// x3,y3 is the end point
+		Vector3d p3 = transform(path.getX(),path.getY(),m);
+
+		p1.add(p0);
+		p2.add(p0);
+		p3.add(p0);
+
+		Bezier b = new Bezier(
+				p0.x,p0.y,
+				p1.x,p1.y,
+				p2.x,p2.y,
+				p3.x,p3.y);
+		List<Point2D> points = b.generateCurvePoints(0.1);
+		for(Point2D p : points) myTurtle.moveTo(p.x,p.y);
+		pathPoint.set(p3);
+	}
+
 	private void doClosePath() {
-		logger.debug("Close path {}", pathFirstPoint.toString());
 		myTurtle.moveTo(pathFirstPoint.x,pathFirstPoint.y);
 		isNewPath=true;
 	}
