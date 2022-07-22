@@ -34,9 +34,13 @@ public class LoadSVG implements TurtleLoader {
 	private static final FileNameExtensionFilter filter = new FileNameExtensionFilter("Scaleable Vector Graphics 1.1", "svg");
 	private Turtle myTurtle;
 
-	private boolean isNewPath;  // for cubic paths
+	private boolean isNewSubPath;  // for cubic paths
 	private final Vector3d pathFirstPoint = new Vector3d();
 	private final Vector3d pathPoint = new Vector3d();
+
+	private final Vector3d smoothControlPointA = new Vector3d();
+	private final Vector3d smoothControlPointB = new Vector3d();
+	private boolean previousPathSegWasBezier;
 
 	@Override
 	public FileNameExtensionFilter getFileNameFilter() {
@@ -62,6 +66,7 @@ public class LoadSVG implements TurtleLoader {
 
 		myTurtle = new Turtle();
 		myTurtle.setColor(new ColorRGB(0,0,0));
+		pathPoint.set(myTurtle.getX(),myTurtle.getY(),0);
 		parseAll(document);
 
 		Rectangle2D.Double r = myTurtle.getBounds();
@@ -328,10 +333,11 @@ public class LoadSVG implements TurtleLoader {
 
 			Matrix3d m = getMatrixFromElement(element);
 
-			SVGPathSegList pathList = element.getPathSegList();
+			SVGPathSegList pathList = element.getNormalizedPathSegList();
 			int itemCount = pathList.getNumberOfItems();
 			logger.debug("Node has {} elements.", itemCount);
-			isNewPath=true;
+			isNewSubPath =true;
+			previousPathSegWasBezier=false;
 
 			for(int i=0; i<itemCount; i++) {
 				SVGPathSeg item = pathList.getItem(i);
@@ -343,6 +349,8 @@ public class LoadSVG implements TurtleLoader {
 					case SVGPathSeg.PATHSEG_LINETO_REL 			-> doLineToRel(item,m);  	// l
 					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_ABS 	-> doCubicCurveAbs(item,m);	// C
 					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_REL 	-> doCubicCurveRel(item,m);	// c
+					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_ABS -> doCubicCurveSmoothAbs(item,m);  // S
+					case SVGPathSeg.PATHSEG_CURVETO_CUBIC_SMOOTH_REL -> doCubicCurveSmoothRel(item,m);  // s
 					case SVGPathSeg.PATHSEG_CLOSEPATH 			-> doClosePath(); 			// Z z
 					case SVGPathSeg.PATHSEG_ARC_ABS				-> doArcAbs(item,m);  // A
 					case SVGPathSeg.PATHSEG_ARC_REL				-> doArcRel(item,m);  // a
@@ -380,7 +388,7 @@ public class LoadSVG implements TurtleLoader {
 		var end = transform(path.getX(), path.getY(), m);
 
 		// with start (aka pathPoint), end, rx, ry find the two centers.
-		getArcCenter(pathPoint, end, r1, r2, angleDegrees, fA, fS);
+		drawArc(pathPoint, end, r1, r2, angleDegrees, fA, fS);
 	}
 
 	private void doArcRel(SVGPathSeg item, Matrix3d m) {
@@ -394,10 +402,10 @@ public class LoadSVG implements TurtleLoader {
 		end.add(pathPoint);
 
 		// with start (aka pathPoint), end, rx, ry find the two centers.
-		getArcCenter(pathPoint, end, r1, r2, angleDegrees, fA, fS);
+		drawArc(pathPoint, end, r1, r2, angleDegrees, fA, fS);
 	}
 
-	private void getArcCenter(Vector3d start, Vector3d end, double r1, double r2, double angleDegrees, boolean fA, boolean fS) {
+	private void drawArc(Vector3d start, Vector3d end, double r1, double r2, double angleDegrees, boolean fA, boolean fS) {
 		// translate to mid point of start-end
 		var prime = new Vector3d(
 				(start.x-end.x)/2.0,
@@ -468,8 +476,10 @@ public class LoadSVG implements TurtleLoader {
 		logger.debug("steps={}",steps);
 
 		logger.debug("angleDegrees={}",angleDegrees);
-		Vector3d rx2 = new Vector3d( Math.cos(angleRadians), Math.sin(angleRadians),0 );
-		Vector3d ry2 = new Vector3d( -rx2.y, rx2.x, 0 );
+		double c=Math.cos(angleRadians);
+		double s=Math.sin(angleRadians);
+		Vector3d rx2 = new Vector3d( c, s,0 );
+		Vector3d ry2 = new Vector3d( -s, c, 0 );
 
 		Vector3d rx3 = new Vector3d();
 		Vector3d ry3 = new Vector3d();
@@ -493,6 +503,8 @@ public class LoadSVG implements TurtleLoader {
 
 		pathPoint.set(end);
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath =false;
 	}
 
 	private void doLineToVerticalAbs(SVGPathSeg item, Matrix3d m) {
@@ -500,6 +512,8 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(0,path.getY(),m);
 		pathPoint.y = p.y;
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath =false;
 	}
 
 	private void doLineToVerticalRel(SVGPathSeg item, Matrix3d m) {
@@ -507,6 +521,8 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(0,path.getY(),m);
 		pathPoint.y += p.y;
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath =false;
 	}
 
 	private void doLineToHorizontalAbs(SVGPathSeg item, Matrix3d m) {
@@ -514,6 +530,8 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(path.getX(),0,m);
 		pathPoint.x = p.x;
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath =false;
 	}
 
 	private void doLineToHorizontalRel(SVGPathSeg item, Matrix3d m) {
@@ -521,6 +539,8 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(path.getX(),0,m);
 		pathPoint.x += p.x;
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath =false;
 	}
 
 	private void doMoveToAbs(SVGPathSeg item, Matrix3d m) {
@@ -529,21 +549,24 @@ public class LoadSVG implements TurtleLoader {
 		pathPoint.set(p);
 		myTurtle.jumpTo(pathPoint.x,pathPoint.y);
 
-		rememberIfFirstMove(pathPoint);
+		rememberNewSubPathStart(pathPoint);
+		previousPathSegWasBezier=false;
 	}
 
 	private void doMoveToRel(SVGPathSeg item, Matrix3d m) {
 		var path = (SVGPathSegMovetoRel)item;
 		Vector3d p = transform(path.getX(),path.getY(),m);
-		pathPoint.add(p);
+		if(isNewSubPath) pathPoint.set(p);
+		else pathPoint.add(p);
 		myTurtle.jumpTo(pathPoint.x,pathPoint.y);
 
-		rememberIfFirstMove(pathPoint);
+		rememberNewSubPathStart(pathPoint);
+		previousPathSegWasBezier=false;
 	}
 
-	private void rememberIfFirstMove(Vector3d p) {
-		if(isNewPath) pathFirstPoint.set(p);
-		isNewPath=false;
+	private void rememberNewSubPathStart(Vector3d p) {
+		pathFirstPoint.set(p);
+		isNewSubPath=false;
 	}
 
 	private void doLineToRel(SVGPathSeg item, Matrix3d m) {
@@ -551,6 +574,8 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.add(p);
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath=false;
 	}
 
 	private void doLineToAbs(SVGPathSeg item, Matrix3d m) {
@@ -558,27 +583,70 @@ public class LoadSVG implements TurtleLoader {
 		Vector3d p = transform(path.getX(),path.getY(),m);
 		pathPoint.set(p);
 		myTurtle.moveTo(pathPoint.x,pathPoint.y);
+		previousPathSegWasBezier=false;
+		isNewSubPath=false;
+	}
+
+	private void doCubicCurveSmoothAbs(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegCurvetoCubicSmoothAbs)item;
+
+		Vector3d p0 = pathPoint;
+		Vector3d p1;
+		if(!previousPathSegWasBezier) {
+			p1 = pathPoint;
+		} else {
+			// p1 is a reflection of the previous control point.
+			// aka (A-B)+A aka 2A-B
+			p1 = new Vector3d(smoothControlPointA);
+			p1.scale(2);
+			p1.sub(smoothControlPointB);
+		}
+		// x2,y2 is the second control point
+		Vector3d p2 = transform(path.getX2(), path.getY2(), m);
+		// x3,y3 is the end point
+		Vector3d p3 = transform(path.getX(), path.getY(), m);
+
+		drawBezier(p0, p1, p2, p3);
+	}
+
+	private void doCubicCurveSmoothRel(SVGPathSeg item, Matrix3d m) {
+		var path = (SVGPathSegCurvetoCubicSmoothRel)item;
+
+		Vector3d p0 = pathPoint;
+		Vector3d p1;
+		if(!previousPathSegWasBezier) {
+			p1 = pathPoint;
+		} else {
+			// p1 is a reflection of the previous control point.
+			// aka (A-B)+A aka 2A-B
+			p1 = new Vector3d(smoothControlPointA);
+			p1.add(smoothControlPointA);
+			p1.sub(smoothControlPointB);
+		}
+
+		// x2,y2 is the second control point
+		Vector3d p2 = transform(path.getX2(), path.getY2(), m);
+		// x3,y3 is the end point
+		Vector3d p3 = transform(path.getX(), path.getY(), m);
+
+		p2.add(p0);
+		p3.add(p0);
+
+		drawBezier(p0, p1, p2, p3);
 	}
 
 	private void doCubicCurveAbs(SVGPathSeg item, Matrix3d m) {
-		var path = (SVGPathSegCurvetoCubicAbs)item;
+		var path = (SVGPathSegCurvetoCubicAbs) item;
 		// x0,y0 is the first point
 		Vector3d p0 = pathPoint;
 		// x1,y1 is the first control point
-		Vector3d p1 = transform(path.getX1(),path.getY1(),m);
+		Vector3d p1 = transform(path.getX1(), path.getY1(), m);
 		// x2,y2 is the second control point
-		Vector3d p2 = transform(path.getX2(),path.getY2(),m);
+		Vector3d p2 = transform(path.getX2(), path.getY2(), m);
 		// x3,y3 is the end point
-		Vector3d p3 = transform(path.getX(),path.getY(),m);
+		Vector3d p3 = transform(path.getX(), path.getY(), m);
 
-		Bezier b = new Bezier(
-				p0.x,p0.y,
-				p1.x,p1.y,
-				p2.x,p2.y,
-				p3.x,p3.y);
-		List<Point2D> points = b.generateCurvePoints(0.1);
-		for(Point2D p : points) myTurtle.moveTo(p.x,p.y);
-		pathPoint.set(p3);
+		drawBezier(p0, p1, p2, p3);
 	}
 
 	private void doCubicCurveRel(SVGPathSeg item, Matrix3d m) {
@@ -596,6 +664,10 @@ public class LoadSVG implements TurtleLoader {
 		p2.add(p0);
 		p3.add(p0);
 
+		drawBezier(p0, p1, p2, p3);
+	}
+
+	private void drawBezier(Vector3d p0,Vector3d p1,Vector3d p2,Vector3d p3) {
 		Bezier b = new Bezier(
 				p0.x,p0.y,
 				p1.x,p1.y,
@@ -604,11 +676,16 @@ public class LoadSVG implements TurtleLoader {
 		List<Point2D> points = b.generateCurvePoints(0.1);
 		for(Point2D p : points) myTurtle.moveTo(p.x,p.y);
 		pathPoint.set(p3);
+		smoothControlPointA.set(p3);
+		smoothControlPointB.set(p2);
+		previousPathSegWasBezier=true;
+		isNewSubPath=false;
 	}
 
 	private void doClosePath() {
+		logger.debug("closing to {}",pathFirstPoint);
 		myTurtle.moveTo(pathFirstPoint.x,pathFirstPoint.y);
-		isNewPath=true;
+		isNewSubPath=true;
 	}
 
 	private Vector3d transform(double x, double y, Matrix3d m) {
